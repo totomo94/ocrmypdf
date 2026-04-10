@@ -1,11 +1,10 @@
-import os
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import Response, JSONResponse
 
 app = FastAPI()
 
@@ -19,10 +18,10 @@ def health():
 async def ocr_pdf(
     file: UploadFile = File(...),
     language: str = Form("deu+eng"),
-    force_ocr: bool = Form("false"),
-    skip_text: bool = Form("true"),
-    deskew: bool = Form("true"),
-    rotate_pages: bool = Form("true"),
+    force_ocr: str = Form("false"),
+    skip_text: str = Form("true"),
+    deskew: str = Form("true"),
+    rotate_pages: str = Form("true"),
     output_type: str = Form("pdf"),
 ):
     if not file.filename:
@@ -42,10 +41,8 @@ async def ocr_pdf(
 
         cmd = [
             "ocrmypdf",
-            "--language",
-            language,
-            "--output-type",
-            output_type,
+            "--language", language,
+            "--output-type", output_type,
         ]
 
         if force_ocr.lower() == "true":
@@ -61,15 +58,12 @@ async def ocr_pdf(
 
         cmd.extend([str(input_pdf), str(output_pdf)])
 
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to start OCRmyPDF: {e}")
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
         if result.returncode != 0:
             return JSONResponse(
@@ -79,16 +73,28 @@ async def ocr_pdf(
                     "returncode": result.returncode,
                     "stderr": result.stderr,
                     "stdout": result.stdout,
+                    "command": cmd,
                 },
             )
 
         if not output_pdf.exists():
-            raise HTTPException(status_code=500, detail="OCR output PDF was not created")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "detail": "OCR output PDF was not created",
+                    "stdout": result.stdout,
+                    "stderr": result.stderr,
+                },
+            )
 
-        download_name = Path(file.filename).stem + ".ocr.pdf"
+        pdf_bytes = output_pdf.read_bytes()
+        filename = f"{Path(file.filename).stem}.ocr.pdf"
 
-        return FileResponse(
-            path=str(output_pdf),
+        return Response(
+            content=pdf_bytes,
             media_type="application/pdf",
-            filename=download_name,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            },
         )
