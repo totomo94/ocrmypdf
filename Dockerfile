@@ -2,10 +2,10 @@ FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y \
     ocrmypdf \
+    ghostscript \
     tesseract-ocr \
     tesseract-ocr-deu \
     tesseract-ocr-eng \
-    ghostscript \
     pngquant \
     unpaper \
     qpdf \
